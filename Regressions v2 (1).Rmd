@@ -1,0 +1,768 @@
+---
+title: "Regressions"
+author: "Team Winning"
+date: "Spring 2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+knitr::opts_chunk$set(echo = TRUE, comment = NA, message = FALSE,
+                      fig.width = 6, fig.height = 3, fig.align = "right", tidy.opts=list(width.cutoff=60), tidy=TRUE)
+
+library(data.table)
+library(lfe)
+library(ggplot2)
+library(knitr)
+library(stargazer)
+library(AER)
+library(rdd)
+library(devtools)
+library(ISLR)
+library(data.table)
+library(ggplot2)
+library(caret)
+library(stargazer)
+library(knitr)
+library(glmnet)
+library(aod)
+library(pls)
+library(kableExtra)
+library(leaps)
+library(tree)
+library(randomForest)
+library(gbm)
+library(geosphere)
+
+```
+
+First, I load the initial MLB Data set we created, and set variables to allow for analysis. I'm not including this in the R Markdown file just to be cleaner.
+
+```{r, include=FALSE}
+
+mlb_data = read.csv("Users/HuanLiang/Desktop/Winning and Baseball/MLB Data v6.csv")
+
+mlb_data = as.data.table(mlb_data)
+
+mlb_data$revenue = as.numeric(as.character(mlb_data$revenue))
+
+mlb_data$relative_strength_index = as.numeric(as.character(mlb_data$relative_strength_index))
+
+mlb_data$Modified_RSI = as.numeric(as.character(mlb_data$Modified_RSI))
+
+mlb_data$MLB_Wins_PS = as.numeric(as.character(mlb_data$MLB_Wins_PS))
+
+mlb_data$Division_Wins_PS = as.numeric(as.character(mlb_data$Division_Wins_PS))
+
+mlb_data$League_Wins_PS = as.numeric(as.character(mlb_data$League_Wins_PS))
+
+mlb_data$MLB_Wins_PS = as.numeric(as.character(mlb_data$MLB_Wins_PS))
+
+mlb_data$Division_Wins_PS = as.numeric(as.character(mlb_data$Division_Wins_PS))
+
+mlb_data$League_Wins_PS = as.numeric(as.character(mlb_data$League_Wins_PS))
+
+mlb_data$Diff_Wins_MLB = as.numeric(as.character(mlb_data$Diff_Wins_MLB))
+
+mlb_data$Diff_Wins_Division = as.numeric(as.character(mlb_data$Diff_Wins_Division))
+
+mlb_data$Diff_Win_League = as.numeric(as.character(mlb_data$Diff_Win_League))
+
+mlb_data$stadium_age = as.numeric(mlb_data$stadium_age)
+
+mlb_data$W = as.numeric(mlb_data$W)
+
+mlb_data$population = as.numeric(mlb_data$population)
+
+mlb_data$team_value = as.numeric(mlb_data$team_value)
+
+mlb_data$Total.Attendance = as.numeric(mlb_data$Total.Attendance)
+
+mlb_data$per_capita_income = as.numeric(as.character(mlb_data$per_capita_income))
+
+mlb_data$Opp_Run_Diff = as.numeric(as.character(mlb_data$Opp_Run_Diff))
+
+mlb_data$Opp_Run_Diff = as.numeric(as.character(mlb_data$Opp_Run_Diff))
+
+
+mlb_data$ESPN_SoS = as.numeric(as.character(mlb_data$ESPN_SoS))
+
+mlb_data$Team_WAR = as.numeric(as.character(mlb_data$Team_WAR))
+
+mlb_data$WS_winner = as.numeric(mlb_data$WS_winner)
+
+mlb_data$post_season_appearance = as.numeric(mlb_data$post_season_appearance)
+
+mlb_data$stadium_fill_perc = as.numeric(mlb_data$stadium_fill_perc)
+
+mlb_data$Modified_RSI = as.numeric(as.character(mlb_data$Modified_RSI))
+
+mlb_data$strength_of_schedule = as.numeric(as.character(mlb_data$strength_of_schedule))
+
+mlb_data$Real_FCI_2016 = as.numeric(as.character(mlb_data$Real_FCI_2016))
+
+mlb_data$real_revenue_2016 = as.numeric(as.character(mlb_data$real_revenue_2016))
+
+mlb_data$Real.Operating.Income = as.numeric(as.character(mlb_data$Real.Operating.Income))
+
+mlb_data$Opp_Win_P = as.numeric(as.character(mlb_data$Opp_Win_P))
+
+mlb_data$Real_Forbes_Rev = as.numeric(as.character(mlb_data$Real_Forbes_Rev))
+
+
+
+
+```
+
+Then I limit the data set for the OLS regressions, and the IV regressions.
+
+```{r}
+
+reg_data = mlb_data[Year>1995&Year<2017]
+
+reg_data = reg_data[Team!="Montreal Expos"&Team!="Toronto Blue Jays"]
+
+reg_data_first = reg_data[Year<=2010]
+
+reg_data_second = reg_data[Year>2010]
+
+reg_data_oi = reg_data[Year>2003]
+
+
+iv_data = reg_data[strength_of_schedule>-10&SoSLY>-10&SoSLY2>-10&SoSLY3>-10]
+
+reg_data_random = reg_data[LYDiff_League>-5&LYDiff_League<5]
+
+reg_data$Year = as.factor(reg_data$Year)
+
+iv_data$Year = as.factor(iv_data$Year)
+
+
+reg_data_oi$Year = as.factor(reg_data_oi$Year)
+
+reg_data_first$Year = as.factor(reg_data_first$Year)
+
+reg_data_second$Year = as.factor(reg_data_second$Year)
+
+reg_data_random$Year = as.factor(reg_data_random$Year)
+
+
+```
+
+#OLS Regressions - Revenue
+
+Firstly, I run the regressions on real and nominal revenue
+
+```{r}
+
+data_right = reg_data[LY5_playoffs>=0]
+
+data_right_1 = reg_data_first[LY5_playoffs>=0]
+
+data_right_2 = reg_data_second[LY5_playoffs>=0]
+
+
+
+real.rev.reg = lm(real_revenue_2016~W+LY_wins+LY2_wins+LY3_wins+LY_playoffs+LY2_playoffs+LY3_playoffs+LY_WS+LY2_WS+LY3_WS+stad_age_1+stad_age_2+stad_age_3+per_capita_income+population,data=data_right)
+
+real.rev.reg.basic.1 = lm(real_revenue_2016~W+stad_age_1+stad_age_2+stad_age_3+per_capita_income+population+Team+Year,data=data_right)
+
+
+
+real.rev.reg.basic.2 = lm(real_revenue_2016~W+LY_wins+LY_playoffs+LY_WS+stad_age_1+per_capita_income+population+Team+Year,data=data_right)
+
+real.rev.reg.basic.3 = lm(real_revenue_2016~W+LY_wins+LY2_wins+LY_playoffs+LY2_playoffs+LY_WS+LY2_WS+stad_age_1+stad_age_2+per_capita_income+population+Team+Year,data=data_right)
+
+real.rev.reg.basic.4 = lm(real_revenue_2016~W+LY_wins+LY2_wins+LY3_wins+LY_playoffs+LY2_playoffs+LY3_playoffs+LY_WS+LY2_WS+LY3_WS+stad_age_1+stad_age_2+stad_age_3+per_capita_income+population+Team+Year,data=data_right)
+
+real.rev.reg.basic.5 = lm(real_revenue_2016~W+LY_wins+LY2_wins+LY3_wins+LY4_wins+LY_playoffs+LY2_playoffs+LY3_playoffs+LY4_playoffs+LY_WS+LY2_WS+LY3_WS+LY4_WS+stad_age_1+stad_age_2+stad_age_3+stad_age_4+per_capita_income+population+Team+Year,data=data_right)
+
+real.rev.reg.basic.6 = lm(real_revenue_2016~W+LY_wins+LY2_wins+LY3_wins+LY4_wins+LY5_wins+LY_playoffs+LY2_playoffs+LY3_playoffs+LY4_playoffs+LY5_playoffs+LY_WS+LY2_WS+LY3_WS+LY4_WS+LY5_WS+stad_age_1+stad_age_2+stad_age_3+stad_age_4+stad_age_5+stad_age_6+stad_age_7+per_capita_income+population+Team+Year,data=data_right)
+
+
+
+real.rev.reg.just2 = lm(real_revenue_2016~W+LY2_wins+LY2_playoffs+LY2_WS+stad_age_1+stad_age_2+stad_age_3+per_capita_income+population,data=reg_data)
+
+
+stargazer(real.rev.reg.basic.2,real.rev.reg.basic.3,real.rev.reg.basic.4,real.rev.reg.basic.5,real.rev.reg.basic.6,type="text")
+
+```
+
+Regressions with fixed effects
+
+```{r}
+
+anova(real.rev.reg.basic.2,real.rev.reg.basic.3,real.rev.reg.basic.4,real.rev.reg.basic.5,real.rev.reg.basic.6)
+
+anova(real.rev.reg.basic.5,real.rev.reg.basic.6)
+
+
+real.rev.reg.basic.6 = lm(real_revenue_2016~W+LY_wins+LY2_wins+LY3_wins+LY4_wins+LY5_wins+LY_playoffs+LY2_playoffs+LY3_playoffs+LY4_playoffs+LY5_playoffs+LY_WS+LY2_WS+LY3_WS+LY4_WS+LY5_WS+stad_age_1+stad_age_2+stad_age_3+stad_age_4+stad_age_5+stad_age_6+stad_age_7+per_capita_income+population+two_teams,data=reg_data)
+
+real.rev.reg.basic.7 = lm(real_revenue_2016~W+LY_wins+LY2_wins+LY3_wins+LY4_wins+LY5_wins+LY_playoffs+LY2_playoffs+LY3_playoffs+LY4_playoffs+LY5_playoffs+LY_WS+LY2_WS+LY3_WS+LY4_WS+LY5_WS+stad_age_1+stad_age_2+stad_age_3+stad_age_4+stad_age_5+stad_age_6+stad_age_7+per_capita_income+population+Team+Year,data=reg_data)
+
+stargazer(real.rev.reg.basic.6,real.rev.reg.basic.7,type="text")
+
+```
+
+#OLS Regressions - Revenue
+
+Firstly, I run the regressions on real and nominal revenue
+
+```{r}
+
+reg.check.lags.1 = lm(real_revenue_2016~W+LY_wins+LY2_wins+LY3_wins+LY4_wins+LY5_wins+LY_playoffs+LY2_playoffs+LY3_playoffs+LY4_playoffs+LY5_playoffs+LY_WS+LY2_WS+LY3_WS+LY4_WS+LY5_WS+stad_age_1+stad_age_2+stad_age_3+stad_age_4+stad_age_5+stad_age_6+stad_age_7+per_capita_income+population+Team+Year,data=data_right_1)
+
+reg.check.nolags.1 = lm(real_revenue_2016~W+stad_age_1+stad_age_2+stad_age_3+stad_age_4+stad_age_5+stad_age_6+stad_age_7+per_capita_income+population+Team+Year,data=data_right_1)
+
+stargazer(reg.check.lags.1,reg.check.nolags.1,type="text")
+
+```
+
+Now creating forecasts for each of the two models (one with lags one without)
+
+```{r}
+# extract all coefficients other than season dummy vars
+
+data_right_1 = as.data.frame(data_right_1)
+data_right_2 = as.data.frame(data_right_2)
+
+initial_year_coef_lags = coef(reg.check.lags.1)[grep("^Year", names(coef(reg.check.lags.1)))]
+initial_year_coef_nolags = coef(reg.check.nolags.1)[grep("^Year", names(coef(reg.check.nolags.1)))]
+
+
+year_coef_DT_lags = data.table(year=c(1999,2000,2001,2002,2003,2004,2005,2006,2007,2008,2009,2010),coefficient=initial_year_coef_lags)
+year_coef_DT_nolags = data.table(year=c(1999,2000,2001,2002,2003,2004,2005,2006,2007,2008,2009,2010),coefficient=initial_year_coef_nolags)
+
+
+new.coef_lags = lm(coefficient~year,data=year_coef_DT_lags)
+new.coef_nolags = lm(coefficient~year,data=year_coef_DT_nolags)
+
+Y2011_lags = year_coef_DT_lags$coefficient[12]+coef(new.coef_lags)[2]
+Y2012_lags = Y2011_lags +coef(new.coef_lags)[2]
+Y2013_lags = Y2012_lags+coef(new.coef_lags)[2]
+Y2014_lags = Y2013_lags+coef(new.coef_lags)[2]
+Y2015_lags = Y2014_lags+coef(new.coef_lags)[2]
+Y2016_lags = Y2015_lags+coef(new.coef_lags)[2]
+
+Y2011_nolags = year_coef_DT_nolags$coefficient[12]+coef(new.coef_nolags)[2]
+Y2012_nolags = Y2011_nolags+coef(new.coef_nolags)[2]
+Y2013_nolags = Y2012_nolags+coef(new.coef_nolags)[2]
+Y2014_nolags = Y2013_nolags+coef(new.coef_nolags)[2]
+Y2015_nolags = Y2014_nolags+coef(new.coef_nolags)[2]
+Y2016_nolags = Y2015_nolags+coef(new.coef_nolags)[2]
+
+fe_season_lags = data.table(Year=data_right_2$Year,coef=NA)
+
+fe_season_lags = fe_season_lags[,coef:=ifelse(Year==2011,Y2011_lags,ifelse(Year==2012,Y2012_lags,ifelse(Year==2013,Y2013_lags,ifelse(Year==2014,Y2014_lags,ifelse(Year==2015,Y2015_lags,ifelse(Year==2016,Y2016_lags,NA))))))]
+
+fe_season_nolags = data.table(Year=data_right_2$Year,coef=NA)
+
+fe_season_nolags = fe_season_nolags[,coef:=ifelse(Year==2011,Y2011_nolags,ifelse(Year==2012,Y2012_nolags,ifelse(Year==2013,Y2013_nolags,ifelse(Year==2014,Y2014_nolags,ifelse(Year==2015,Y2015_nolags,ifelse(Year==2016,Y2016_nolags,NA))))))]
+
+fixed.effect.season_lags = fe_season_lags$coef
+
+fixed.effect.season_nolags = fe_season_nolags$coef
+
+modified.predictors_lags <- coef(reg.check.lags.1)[-grep("^Year", names(coef(reg.check.lags.1)))]
+
+modified.predictors_nolags <- coef(reg.check.nolags.1)[-grep("^Year", names(coef(reg.check.nolags.1)))]
+
+col.pred_lags <- colnames(data_right_2)[which(colnames(data_right_2) %in% names(modified.predictors_lags))]
+
+col.pred_nolags <- colnames(data_right_2)[which(colnames(data_right_2) %in% names(modified.predictors_nolags))]
+
+
+match.vec_lags <- match(col.pred_lags, names(modified.predictors_lags))
+
+match.vec_nolags <- match(col.pred_nolags, names(modified.predictors_nolags))
+
+fixed.effect.coeff_lags <- modified.predictors_lags[match(data_right_2$Team, gsub("Team", "", names(modified.predictors_lags)))]
+fixed.effect.coeff_nolags <- modified.predictors_nolags[match(data_right_2$Team, gsub("Team", "", names(modified.predictors_nolags)))]
+
+
+fixed.effect.coeff_lags[1:6] = 0
+
+names(fixed.effect.coeff_lags[1:6]) = "TeamAnaheim Angels"
+
+fixed.effect.coeff_nolags[1:6] = 0
+
+names(fixed.effect.coeff_nolags[1:6]) = "TeamAnaheim Angels"
+
+#Figure out how to add in Anaheim
+
+data_right_2$lags.pred <- as.matrix(data_right_2[, col.pred_lags]) %*% as.matrix(modified.predictors_lags[match.vec_lags]) + fixed.effect.coeff_lags + fixed.effect.season_lags + coef(reg.check.lags.1)[1]
+
+data_right_2$nolags.pred <- as.matrix(data_right_2[, col.pred_nolags]) %*% as.matrix(modified.predictors_nolags[match.vec_nolags]) + fixed.effect.coeff_nolags + fixed.effect.season_nolags + coef(reg.check.nolags.1)[1]
+
+
+pred.data = data.table(Year=data_right_2$Year,Team=data_right_2$Team,Real_Rev=data_right_2$real_revenue_2016,pred_rev_lags=data_right_2$lags.pred,pred_rev_nolags=data_right_2$nolags.pred)
+
+mean(pred.data$Real_Rev-pred.data$pred_rev_lags.V1)
+
+mean(pred.data$Real_Rev-pred.data$pred_rev_nolags.V1)
+
+mean(pred.data$Real_Rev)
+
+
+
+write.csv(pred.data,file="Predicted_DT.csv")
+```
+
+Wald test for team fixed effects 
+
+```{r}
+
+coeff.model.fe = real.rev.reg.basic.7$coeff
+
+# Step 1: extract the number of predictors
+num.predictors.team <- grep("^Team", names(real.rev.reg.basic.7$coeff))
+
+# Step 2: initialize an empty Restriction Matrix to store values
+R1.team <- matrix(0, nrow = length(num.predictors.team) - 1, ncol = length(coeff.model.fe))
+# Step 3: populate Restriction Matrix 
+R1.team[, num.predictors.team[1]:num.predictors.team[length(num.predictors.team)]] <- -1/length(num.predictors.team)
+R1.team[, num.predictors.team[1]:(num.predictors.team[length(num.predictors.team)]-1)] <- R1.team[, num.predictors.team[1]:(num.predictors.team[length(num.predictors.team)]-1)] + diag(length(num.predictors.team) - 1)
+
+# Step 4: create the r vector (right side of equation)
+r1.team <- matrix(0, nrow = length(num.predictors.team) - 1, ncol = 1)
+
+# Step 5: perform Wald Test
+wald.test.team <- wald.test(b = coeff.model.fe, Sigma = vcov(real.rev.reg.basic.7), 
+                         L = R1.team); wald.test.team
+WT.team <- wald.test.team$result$chi2[1]
+
+coef_team = as.data.table(real.rev.reg.basic.5$coeff)
+
+coef_team = coef_team[,Coef:=names(real.rev.reg.basic.5$coeff)]
+
+coef_team = coef_team[,SE:= coef(summary(real.rev.reg.basic.5))[, "Std. Error"]]
+```
+
+Wald test for year fixed effects 
+
+```{r}
+
+coeff.model.fe = real.rev.reg.basic.7$coeff
+
+# Step 1: extract the number of predictors
+num.predictors.year <- grep("^Year", names(real.rev.reg.basic.7$coeff))
+
+# Step 2: initialize an empty Restriction Matrix to store values
+R1.year <- matrix(0, nrow = length(num.predictors.year) - 1, ncol = length(coeff.model.fe))
+# Step 3: populate Restriction Matrix 
+R1.year[, num.predictors.year[1]:num.predictors.year[length(num.predictors.year)]] <- -1/length(num.predictors.year)
+R1.year[, num.predictors.year[1]:(num.predictors.year[length(num.predictors.year)]-1)] <- R1.year[, num.predictors.year[1]:(num.predictors.year[length(num.predictors.year)]-1)] + diag(length(num.predictors.year) - 1)
+
+# Step 4: create the r vector (right side of equation)
+r1.year <- matrix(0, nrow = length(num.predictors.year) - 1, ncol = 1)
+
+# Step 5: perform Wald Test
+wald.test.year <- wald.test(b = coeff.model.fe, Sigma = vcov(real.rev.reg.basic.7), 
+                         L = R1.year); wald.test.year
+WT.year <- wald.test.year$result$chi2[1]
+
+```
+
+Wald Test for Playoffs
+
+```{r}
+
+coeff.model.fe = real.rev.reg.basic.7$coeff
+
+# Step 1: extract the number of predictors
+num.predictors.playoff <- grep("playoffs", names(real.rev.reg.basic.7$coeff))
+
+# Step 2: initialize an empty Restriction Matrix to store values
+R1.playoff <- matrix(0, nrow = length(num.predictors.playoff) - 1, ncol = length(coeff.model.fe))
+# Step 3: populate Restriction Matrix 
+R1.playoff[, num.predictors.playoff[1]:num.predictors.playoff[length(num.predictors.playoff)]] <- -1/length(num.predictors.playoff)
+R1.playoff[, num.predictors.playoff[1]:(num.predictors.playoff[length(num.predictors.playoff)]-1)] <- R1.playoff[, num.predictors.playoff[1]:(num.predictors.playoff[length(num.predictors.playoff)]-1)] + diag(length(num.predictors.playoff) - 1)
+
+# Step 4: create the r vector (right side of equation)
+r1.playoff <- matrix(0, nrow = length(num.predictors.playoff) - 1, ncol = 1)
+
+# Step 5: perform Wald Test
+wald.test.playoff <- wald.test(b = coeff.model.fe, Sigma = vcov(real.rev.reg.basic.7), 
+                         L = R1.playoff); wald.test.playoff
+WT.playoff <- wald.test.playoff$result$chi2[1]
+
+```
+
+Wald Test for Wins
+
+```{r}
+
+coeff.model.fe = real.rev.reg.basic.7$coeff
+
+# Step 1: extract the number of predictors
+num.predictors.win <- grep("_wins", names(real.rev.reg.basic.7$coeff))
+
+# Step 2: initialize an empty Restriction Matrix to store values
+R1.win <- matrix(0, nrow = length(num.predictors.win) - 1, ncol = length(coeff.model.fe))
+# Step 3: populate Restriction Matrix 
+R1.win[, num.predictors.win[1]:num.predictors.win[length(num.predictors.win)]] <- -1/length(num.predictors.win)
+R1.win[, num.predictors.win[1]:(num.predictors.win[length(num.predictors.win)]-1)] <- R1.win[, num.predictors.win[1]:(num.predictors.win[length(num.predictors.win)]-1)] + diag(length(num.predictors.win) - 1)
+
+# Step 4: create the r vector (right side of equation)
+r1.win <- matrix(0, nrow = length(num.predictors.win) - 1, ncol = 1)
+
+# Step 5: perform Wald Test
+wald.test.win <- wald.test(b = coeff.model.fe, Sigma = vcov(real.rev.reg.basic.7), 
+                         L = R1.win); wald.test.win
+WT.win <- wald.test.win$result$chi2[1]
+
+```
+
+Wald Test for stad age
+
+```{r}
+
+coeff.model.fe = real.rev.reg.basic.7$coeff
+
+# Step 1: extract the number of predictors
+num.predictors.stadium <- grep("stad_", names(real.rev.reg.basic.7$coeff))
+
+# Step 2: initialize an empty Restriction Matrix to store values
+R1.stadium <- matrix(0, nrow = length(num.predictors.stadium) - 1, ncol = length(coeff.model.fe))
+# Step 3: populate Restriction Matrix 
+R1.stadium[, num.predictors.stadium[1]:num.predictors.stadium[length(num.predictors.stadium)]] <- -1/length(num.predictors.stadium)
+R1.stadium[, num.predictors.stadium[1]:(num.predictors.stadium[length(num.predictors.stadium)]-1)] <- R1.stadium[, num.predictors.stadium[1]:(num.predictors.stadium[length(num.predictors.stadium)]-1)] + diag(length(num.predictors.stadium) - 1)
+
+# Step 4: create the r vector (right side of equation)
+r1.stadium <- matrix(0, nrow = length(num.predictors.stadium) - 1, ncol = 1)
+
+# Step 5: perform Wald Test
+wald.test.stadium <- wald.test(b = coeff.model.fe, Sigma = vcov(real.rev.reg.basic.7), 
+                         L = R1.stadium); wald.test.stadium
+WT.stadium <- wald.test.stadium$result$chi2[1]
+
+```
+#OLS Regressions - Revenue Forbes
+
+We also want to check how the regressions do on the Forbes revenue. 
+
+```{r}
+
+real.rev.reg.forbes = lm(Real_Forbes_Rev~W+post_season_appearance+LY_wins+LY2_wins+LY3_wins+LY_playoffs+LY2_playoffs+LY3_playoffs+LY_WS+LY2_WS+LY3_WS+stad_age_1+stad_age_2+stad_age_3+per_capita_income+population+two_teams,data=reg_data_oi)
+
+real.rev.reg.basic.1.forbes = lm(Real_Forbes_Rev~W+stad_age_1+stad_age_2+stad_age_3+per_capita_income+population+two_teams,data=reg_data_oi)
+
+
+
+real.rev.reg.basic.2.forbes = lm(Real_Forbes_Rev~W+post_season_appearance+LY_wins+LY_playoffs+LY_WS+stad_age_1+stad_age_2+stad_age_3+per_capita_income+population+two_teams,data=reg_data_oi)
+
+real.rev.reg.basic.3.forbes = lm(Real_Forbes_Rev~W+post_season_appearance+LY_wins+LY2_wins+LY_playoffs+LY2_playoffs+LY_WS+LY2_WS+stad_age_1+stad_age_2+stad_age_3+per_capita_income+population+two_teams,data=reg_data_oi)
+
+real.rev.reg.basic.4.forbes = lm(Real_Forbes_Rev~W+post_season_appearance+LY_wins+LY2_wins+LY3_wins+LY_playoffs+LY2_playoffs+LY3_playoffs+LY_WS+LY2_WS+LY3_WS+stad_age_1+stad_age_2+stad_age_3+per_capita_income+population+two_teams,data=reg_data_oi)
+
+real.rev.reg.basic.5.forbes = lm(Real_Forbes_Rev~W+post_season_appearance+LY_wins+LY2_wins+LY3_wins+LY_playoffs+LY2_playoffs+LY3_playoffs+LY_WS+LY2_WS+LY3_WS+stad_age_1+stad_age_2+stad_age_3+per_capita_income+population+Year+Team,data=reg_data_oi)
+
+
+stargazer(real.rev.reg.basic.1.forbes,real.rev.reg.basic.2.forbes,real.rev.reg.basic.3.forbes,real.rev.reg.basic.4.forbes,real.rev.reg.basic.5.forbes,type="text")
+
+```
+
+
+And plot the residuals.
+
+```{r}
+
+plot(real.rev.reg.basic.7)
+
+```
+
+#OLS Regressions - Op Income
+
+Firstly, I run the regressions on real and nominal revenue
+
+```{r}
+
+real.oi.reg = lm(Real.Operating.Income~W+LY_wins+LY2_wins+LY3_wins+LY_playoffs+LY2_playoffs+LY3_playoffs+LY_WS+LY2_WS+LY3_WS+stad_age_1+stad_age_2+stad_age_3+per_capita_income+population+two_teams+Year,data=reg_data_oi)
+
+
+nom.oi.reg = lm(Operating.Income~W+LY_wins+LY2_wins+LY3_wins+LY_playoffs+LY2_playoffs+LY3_playoffs+LY_WS+LY2_WS+LY3_WS+stad_age_1+stad_age_2+stad_age_3+per_capita_income+population+two_teams+Year,data=reg_data_oi)
+
+stargazer(nom.oi.reg,real.oi.reg,type="text")
+
+```
+
+And plot the residuals.
+
+```{r}
+
+plot(nom.oi.reg)
+
+plot(real.oi.reg)
+```
+
+#IV Regression - 2 Year Lag Playoffs (Op Income and Real Revenue)
+
+Firstly, I run the regressions on real and nominal revenue
+
+```{r}
+
+iv.reg.real.rev.test =  ivreg(real_revenue_2016~LY_playoffs
+                    |SoSLY+I(SoSLY)^2+Year,data = iv_data,diagnostics=TRUE)
+
+summary(iv.reg.real.rev.test,diagnostics=TRUE)
+
+iv.reg.real.revr =  ivreg(real_revenue_2016~LY_playoffs
+                    |SoSLY,data = iv_data)
+
+summary(iv.reg.real.revr,diagnostics=TRUE)
+
+iv.reg.real.rev3 =  ivreg(real_revenue_2016~LY3_playoffs
+                    |SoSLY3,data = iv_data)
+
+summary(iv.reg.real.rev3,diagnostics=TRUE)
+
+iv.reg.real.rev2 =  ivreg(real_revenue_2016~LY2_playoffs
+                    |SoSLY2,data = iv_data)
+
+summary(iv.reg.real.rev2,diagnostics=TRUE)
+
+iv.reg.real.rev1 =  ivreg(real_revenue_2016~W+LY_playoffs+LY2_playoffs+LY3_playoffs+LY4_playoffs+LY5_playoffs+stad_age_1+stad_age_2+stad_age_3+stad_age_4+stad_age_5+stad_age_6+stad_age_7+per_capita_income+Year+Team
+                    |strength_of_schedule+SoSLY+SoSLY2+SoSLY3+SoSLY4+I(SoSLY4)^2+SoSLY5+I(SoSLY5)^2+stad_age_1+stad_age_2+stad_age_3+stad_age_4+stad_age_5+stad_age_6+stad_age_7+per_capita_income+Year+Team,data = iv_data)
+
+summary(iv.reg.real.rev1,diagnostics=TRUE)
+
+coef = summary(iv.reg.real.rev1,diagnostics=TRUE)
+
+coef = coef$coefficients
+
+```
+
+
+
+#Random Regressions Revenue - Teams close to playoffs
+
+Firstly, I run the regressions on real and nominal revenue using only teams that were +/- 3 games of the average playoff team
+
+```{r}
+
+real.rev.reg.RD = lm(real_revenue_2016~W+LY_wins+LY_playoffs+LY_WS+stad_age_1+stad_age_2+stad_age_3+stad_age_4+stad_age_5+stad_age_6+stad_age_7+per_capita_income+population+Year,data=reg_data_random)
+
+
+nom.rev.reg.RD = lm(revenue~W+LY_wins+LY_playoffs+LY_WS+stad_age_1+stad_age_2+stad_age_3+stad_age_4+stad_age_5+stad_age_6+stad_age_7+per_capita_income+population+Year,data=reg_data_random)
+
+summary(real.rev.reg.RD)
+```
+And plot the residuals.
+
+```{r}
+
+plot(nom.rev.reg.RD)
+
+plot(real.rev.reg.RD)
+```
+
+#Random Regressions Op Income - Teams close to playoffs
+
+Firstly, I run the regressions on real and nominal operating income for teams within 3 games of the average number of wins to make it to the post season.
+
+```{r}
+
+real.oi.reg.RD = lm(Real.Operating.Income~W+LY_wins+LY2_wins+LY3_wins+LY_playoffs+LY2_playoffs+LY3_playoffs+LY_WS+LY2_WS+LY3_WS+stad_age_1+stad_age_2+stad_age_3+per_capita_income+population+two_teams+Year,data=reg_data_random)
+
+
+nom.oi.reg.RD = lm(Operating.Income~W+LY_wins+LY2_wins+LY3_wins+LY_playoffs+LY2_playoffs+LY3_playoffs+LY_WS+LY2_WS+LY3_WS+stad_age_1+stad_age_2+stad_age_3+per_capita_income+population+two_teams+Year,data=reg_data_random)
+
+stargazer(nom.oi.reg.RD,real.oi.reg.RD,type="text")
+
+```
+
+And plot residuals.
+
+```{r}
+
+plot(real.oi.reg.RD)
+
+plot(nom.oi.reg.RD)
+
+```
+#Instrument regressions
+
+First looking at the different instruments' abilities to predict postseason appearance.
+
+```{r}
+
+ESPN_SoS_Reg_PS = lm(post_season_appearance ~ ESPN_SoS,data=iv_data )
+
+SoS_Reg_PS = lm(post_season_appearance ~ strength_of_schedule,data=iv_data )
+
+SoS_Reg_PS2 = lm(post_season_appearance ~ strength_of_schedule+I(strength_of_schedule^2),data=iv_data )
+
+summary(SoS_Reg_PS)
+
+summary(SoS_Reg_PS2)
+
+Run_Diff_Reg_PS = lm(post_season_appearance ~ Opp_Win_P,data=iv_data )
+
+Modified_RPI_Reg_PS = lm(post_season_appearance ~ Modified_RSI,data=iv_data )
+
+stargazer(ESPN_SoS_Reg_PS,SoS_Reg_PS,Run_Diff_Reg_PS,Modified_RPI_Reg_PS,type="text")
+
+```
+
+Then, wins in general.
+
+```{r}
+
+ESPN_SoS_Reg_w = lm(W ~ ESPN_SoS,data=iv_data )
+
+SoS_Reg_w = lm(W ~ strength_of_schedule,data=iv_data )
+
+Run_Diff_Reg_w = lm(W ~ Norm_Opp_Run,data=iv_data )
+
+Modified_RPI_Reg_w = lm(W ~ Modified_RSI,data=iv_data )
+
+stargazer(ESPN_SoS_Reg_w,SoS_Reg_w,Run_Diff_Reg_w,Modified_RPI_Reg_w,type="text")
+
+```
+
+And revenue.
+
+Then, wins in general.
+
+```{r}
+
+ESPN_SoS_Reg_Rev = lm(real_revenue_2016 ~ ESPN_SoS,data=iv_data )
+
+SoS_Reg_Rev = lm(real_revenue_2016 ~ strength_of_schedule,data=iv_data )
+
+Run_Diff_Reg_Rev = lm(real_revenue_2016 ~ Norm_Opp_Run,data=iv_data )
+
+Modified_RPI_Reg_Rev = lm(real_revenue_2016 ~ Modified_RSI,data=iv_data )
+
+RPI_Reg_Rev = lm(real_revenue_2016 ~ relative_strength_index,data=iv_data )
+
+
+stargazer(ESPN_SoS_Reg_Rev,SoS_Reg_Rev,Run_Diff_Reg_Rev,Modified_RPI_Reg_Rev,RPI_Reg_Rev,type="text")
+
+```
+
+
+some analysis on the quasi-random data set.
+
+```{r}
+
+mean(reg_data_random[LY_playoffs==1]$population)
+
+mean(reg_data_random[LY_playoffs==0]$population)
+
+mean(reg_data_random[LY_playoffs==1]$per_capita_income)
+
+mean(reg_data_random[LY_playoffs==0]$per_capita_income)
+
+
+mean(reg_data_random[LY_playoffs==1]$LY_wins)
+
+mean(reg_data_random[LY_playoffs==0]$LY_wins)
+
+mean(reg_data_random[LY_playoffs==1]$W)
+
+mean(reg_data_random[LY_playoffs==0]$W)
+
+mean(reg_data_random[LY_playoffs==1]$real_revenue_2016)
+
+mean(reg_data_random[LY_playoffs==0]$real_revenue_2016)
+
+t.test(reg_data_random[LY_playoffs==0]$real_revenue_2016,reg_data_random[LY_playoffs==1]$real_revenue_2016)
+
+t.test(reg_data_random[LY_playoffs==0]$population,reg_data_random[LY_playoffs==1]$population)
+
+t.test(reg_data_random[LY_playoffs==0]$per_capita_income,reg_data_random[LY_playoffs==1]$per_capita_income)
+
+coef.reg = coef(real.rev.reg.basic.7)
+
+sum = summary(real.rev.reg.basic.7)
+
+  coef.reg = as.data.table(sum$coefficients)
+```
+
+```{r, include=FALSE}
+
+mlb_data_limited = read.csv("./MLB Data v Most SNR2.csv")
+
+mlb_data_limited = as.data.table(mlb_data_limited)
+
+mlb_data_limited$revenue = as.numeric(as.character(mlb_data_limited$revenue))
+
+mlb_data_limited$relative_strength_index = as.numeric(as.character(mlb_data_limited$relative_strength_index))
+
+mlb_data_limited$Modified_RSI = as.numeric(as.character(mlb_data_limited$Modified_RSI))
+
+mlb_data_limited$MLB_Wins_PS = as.numeric(as.character(mlb_data_limited$MLB_Wins_PS))
+
+mlb_data_limited$Division_Wins_PS = as.numeric(as.character(mlb_data_limited$Division_Wins_PS))
+
+mlb_data_limited$League_Wins_PS = as.numeric(as.character(mlb_data_limited$League_Wins_PS))
+
+mlb_data_limited$MLB_Wins_PS = as.numeric(as.character(mlb_data_limited$MLB_Wins_PS))
+
+mlb_data_limited$Division_Wins_PS = as.numeric(as.character(mlb_data_limited$Division_Wins_PS))
+
+mlb_data_limited$League_Wins_PS = as.numeric(as.character(mlb_data_limited$League_Wins_PS))
+
+mlb_data_limited$Diff_Wins_MLB = as.numeric(as.character(mlb_data_limited$Diff_Wins_MLB))
+
+mlb_data_limited$Diff_Wins_Division = as.numeric(as.character(mlb_data_limited$Diff_Wins_Division))
+
+mlb_data_limited$Diff_Win_League = as.numeric(as.character(mlb_data_limited$Diff_Win_League))
+
+mlb_data_limited$stadium_age = as.numeric(mlb_data_limited$stadium_age)
+
+mlb_data_limited$W = as.numeric(mlb_data_limited$W)
+
+mlb_data_limited$population = as.numeric(mlb_data_limited$population)
+
+mlb_data_limited$team_value = as.numeric(mlb_data_limited$team_value)
+
+mlb_data_limited$Total.Attendance = as.numeric(mlb_data_limited$Total.Attendance)
+
+mlb_data_limited$per_capita_income = as.numeric(as.character(mlb_data_limited$per_capita_income))
+
+mlb_data_limited$Opp_Run_Diff = as.numeric(as.character(mlb_data_limited$Opp_Run_Diff))
+
+mlb_data_limited$Opp_Run_Diff = as.numeric(as.character(mlb_data_limited$Opp_Run_Diff))
+
+
+mlb_data_limited$ESPN_SoS = as.numeric(as.character(mlb_data_limited$ESPN_SoS))
+
+mlb_data_limited$Team_WAR = as.numeric(as.character(mlb_data_limited$Team_WAR))
+
+mlb_data_limited$WS_winner = as.numeric(mlb_data_limited$WS_winner)
+
+mlb_data_limited$post_season_appearance = as.numeric(mlb_data_limited$post_season_appearance)
+
+mlb_data_limited$stadium_fill_perc = as.numeric(mlb_data_limited$stadium_fill_perc)
+
+mlb_data_limited$Modified_RSI = as.numeric(as.character(mlb_data_limited$Modified_RSI))
+
+mlb_data_limited$strength_of_schedule = as.numeric(as.character(mlb_data_limited$strength_of_schedule))
+
+mlb_data_limited$Real_FCI_2016 = as.numeric(as.character(mlb_data_limited$Real_FCI_2016))
+
+mlb_data_limited$real_revenue_2016 = as.numeric(as.character(mlb_data_limited$real_revenue_2016))
+
+mlb_data_limited$Real.Operating.Income = as.numeric(as.character(mlb_data_limited$Real.Operating.Income))
+
+mlb_data_limited$Opp_Win_P = as.numeric(as.character(mlb_data_limited$Opp_Win_P))
+
+mlb_data_limited$Real_Forbes_Rev = as.numeric(as.character(mlb_data_limited$Real_Forbes_Rev))
+
+mlb_data_limited$Year = as.factor(mlb_data_limited$Year)
+
+```
+
+```{r}
+
+limited.fit = lm(real_revenue_2016~W+LY_wins+LY_playoffs+LY_WS+stad_age_1+stad_age_2+stad_age_3+stad_age_4+stad_age_5+stad_age_6+stad_age_7+per_capita_income+population,data=mlb_data_limited)
+
+coef.reg2 = as.data.table(summary(limited.fit)$coefficients)
+
+summary(limited.fit)
+```
+
